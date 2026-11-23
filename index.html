@@ -1,0 +1,1252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Just intonation ear trainer</title>
+  <style>
+    /* ------------------- BASE & LAYOUT ------------------- */
+    body {
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        background: #f4f7f9;
+        color: #333;
+        margin: 0;
+        overflow: hidden;
+    }
+
+    #main {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 300px;
+        bottom: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    #header {
+        flex: 0 0 auto;
+        background: #ffffff;
+        padding: 10px 20px;
+        border-bottom: 1px solid #ddd;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        z-index: 10;
+        box-sizing: border-box;
+    }
+
+    #container {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+        position: relative;
+        background: #fff;
+    }
+
+    canvas { display: block; background: #fff; }
+
+    /* FONT WEIGHT STYLES (BOLD) */
+    h1 { font-size: 1.5em; margin: 0; font-weight: 700; }
+    h2 {
+        font-size: 1.1em;
+        margin-top: 0;
+        margin-bottom: 8px;
+        color: #1e601e;
+        font-weight: 700;
+    }
+    button {
+        font-weight: 700;
+        margin-top: 8px;
+        cursor: pointer;
+    }
+    button:disabled { cursor: default; opacity: 0.45; }
+
+    /* FONT WEIGHT STYLES (LIGHT) */
+    #header p { margin: 5px 0 0 0; font-size: 0.87em; color: #555; font-weight: 300; }
+    .control-group p { font-weight: 300; font-size: 0.87em; margin: 4px 0 8px 0; }
+    label {
+        display: block;
+        margin-top: 8px;
+        font-size: 0.87em;
+        font-weight: 300;
+        color: #444;
+    }
+    label span { font-weight: 300; }
+
+    /* ------------------- CONTROL PANEL ------------------- */
+    #control-panel {
+        position: fixed;
+        top: 0;
+        right: 0;
+        width: 300px;
+        padding: 20px;
+        background: #ffffff;
+        height: 100vh;
+        overflow-y: auto;
+        box-shadow: -2px 0 8px rgba(0,0,0,0.1);
+        z-index: 100;
+        box-sizing: border-box;
+    }
+    .control-group {
+        margin-bottom: 16px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid #eee;
+    }
+    .control-group:last-child { border-bottom: none; padding-bottom: 0; }
+
+    input[type="range"] {
+        width: 100%;
+        margin: 4px 0;
+        -webkit-appearance: none; appearance: none;
+        height: 4px; background: #ddd; border-radius: 2px;
+    }
+
+    /* segmented buttons */
+    .seg { display: flex; gap: 6px; }
+    .seg button {
+        flex: 1;
+        margin-top: 0;
+        padding: 7px 0;
+        border: 1px solid #bbb;
+        background: #fff;
+        color: #333;
+        border-radius: 4px;
+        font-size: 0.9em;
+    }
+    .seg button.active { background: #1e601e; border-color: #1e601e; color: #fff; }
+    .action-row { display: flex; gap: 8px; }
+    .action-row button, .wide-btn {
+        flex: 1;
+        margin-top: 8px;
+        padding: 6px 0;
+        border: 1px solid #bbb;
+        background: #f7f7f7;
+        border-radius: 4px;
+    }
+    .wide-btn { width: 100%; }
+
+    #status { min-height: 1.2em; color: #555; }
+    #status.warn { color: #b22222; }
+    #test-feedback { min-height: 2.4em; font-weight: 400; color: #333; }
+    #test-feedback.good { color: #1e601e; }
+    #test-feedback.bad { color: #b22222; }
+    #test-score { font-weight: 700; }
+    #hover-info { font-size: 0.87em; font-weight: 300; line-height: 1.5; min-height: 6em; }
+
+    input[type="text"], select {
+        font-family: inherit;
+        font-weight: 300;
+        width: 100%;
+        box-sizing: border-box;
+        padding: 5px 7px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 0.9em;
+        margin-top: 4px;
+        background: #fff;
+    }
+    input[type="text"]:disabled { background: #f3f3f3; color: #999; }
+    .two-col { display: flex; gap: 10px; }
+    .two-col > div { flex: 1; min-width: 0; }
+    .warn-text { color: #b22222; min-height: 1.2em; }
+
+    /* ------------------- ACCORDION ------------------- */
+    .control-group > h2 {
+        cursor: pointer;
+        user-select: none;
+        position: relative;
+        padding-right: 1.5em;
+    }
+    .control-group > h2::after {
+        content: '▾';
+        position: absolute;
+        right: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 0.9em;
+        color: #888;
+    }
+    .control-group.collapsed > h2::after { content: '▸'; }
+    .control-group.collapsed > .control-content { display: none; }
+  </style>
+</head>
+<body>
+
+  <div id="main">
+    <div id="header">
+      <h1>Just intonation ear trainer</h1>
+      <p>Use SELECT to show prime limits and choose a pool of pitches, LISTEN to hear the selected pitches, and TEST to identify each interval by clicking its node. Intervals can sound simultaneously or successively, above or below a fixed or variable fundamental. Copyright © Alexander Garsden 2026.</p>
+    </div>
+    <div id="container">
+      <canvas id="grid"></canvas>
+    </div>
+  </div>
+
+  <div id="control-panel">
+
+    <div class="control-group">
+      <h2>Mode</h2>
+      <div class="control-content">
+        <div class="seg">
+          <button id="mode-select" class="active">Select</button>
+          <button id="mode-listen">Listen</button>
+          <button id="mode-test">Test</button>
+        </div>
+        <p id="mode-hint" style="margin-top:8px;"></p>
+        <p id="status"></p>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Test</h2>
+      <div class="control-content">
+        <p id="test-score">Not started</p>
+        <p id="test-feedback"></p>
+        <div class="action-row">
+          <button id="btn-replay" disabled>Replay (R)</button>
+          <button id="btn-next" disabled>Next (Enter)</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Interval Playback</h2>
+      <div class="control-content">
+        <label style="margin-top:0;">Timing:</label>
+        <div class="seg" style="margin-top:5px;">
+          <button id="pb-simul" class="active lock">Simultaneous</button>
+          <button id="pb-succ" class="lock">Successive</button>
+        </div>
+        <label>Interval placed:</label>
+        <div class="seg" style="margin-top:5px;">
+          <button id="dir-above" class="active lock">Above</button>
+          <button id="dir-below" class="lock">Below</button>
+          <button id="dir-both" class="lock">Both</button>
+        </div>
+        <label>Span:</label>
+        <div class="seg" style="margin-top:5px;">
+          <button id="sp-simple" class="active lock">Simple</button>
+          <button id="sp-comp" class="lock">Compound</button>
+          <button id="sp-both" class="lock">Both</button>
+        </div>
+        <p style="margin-top:8px;">Above or below the fundamental; Both chooses at random for each interval. Successive intervals play the fundamental first, then the interval note (ascending for Above, descending for Below). Compound adds one octave (9/8 sounds as 9/4) and is still answered on the 9/8 node; Both picks at random. With Both, a sounding octave is accepted on either the Unison or Octave node.</p>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Fundamental</h2>
+      <div class="control-content">
+        <label style="margin-top:0;">Mode:</label>
+        <div class="seg" style="margin-top:5px;">
+          <button id="fund-fixed" class="active lock">Fixed</button>
+          <button id="fund-var" class="lock">Variable</button>
+        </div>
+        <label>Display:</label>
+        <div class="seg" style="margin-top:5px;">
+          <button id="disp-hz" class="active">Hz</button>
+          <button id="disp-pitch">Pitch name</button>
+        </div>
+
+        <div id="fixed-row">
+          <label for="fund-input" id="fund-label">Fundamental (Hz):</label>
+          <input type="text" id="fund-input" class="lock" value="440.00">
+        </div>
+
+        <div id="var-rows" style="display:none;">
+          <div class="two-col">
+            <div>
+              <label for="fund-min" id="min-label">Min (Hz):</label>
+              <input type="text" id="fund-min" class="lock" value="220.00">
+            </div>
+            <div>
+              <label for="fund-max" id="max-label">Max (Hz):</label>
+              <input type="text" id="fund-max" class="lock" value="440.00">
+            </div>
+          </div>
+          <label>Fundamental chosen from:</label>
+          <div class="seg" style="margin-top:5px;">
+            <button id="q-any" class="active lock">Any</button>
+            <button id="q-12" class="lock">12-TET</button>
+            <button id="q-24" class="lock">24-TET</button>
+          </div>
+          <p style="margin-top:8px;">A new fundamental is drawn for every interval. "Any" allows any frequency in the range; the tempered options use only 12 or 24 equal steps per octave (A = 440 Hz).</p>
+        </div>
+
+        <p>Examples: 440 or A4 +0c (octave 4 is assumed if omitted).</p>
+        <p id="fund-current" style="font-weight:700;"></p>
+        <p id="fund-msg" class="warn-text"></p>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Grid &amp; Pool</h2>
+      <div class="control-content">
+        <label style="margin-top:0;">Resolution (tempered column, rows, header grouping):</label>
+        <div class="seg" style="margin-top:5px;">
+          <button id="res-12" class="active">12</button>
+          <button id="res-24">24</button>
+        </div>
+        <p id="pool-count" style="margin-top:10px;"></p>
+        <button id="btn-clear" class="wide-btn" style="margin-top:0;">Clear pool</button>
+        <label for="scale-slider">Interface size: <span id="scale-val">1.00</span>x</label>
+        <input type="range" id="scale-slider" min="0.5" max="1.5" step="0.05" value="1.0">
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Sound</h2>
+      <div class="control-content">
+        <div style="display: flex; gap: 15px; align-items: flex-end; margin-bottom: 6px;">
+          <div style="flex: 1.2;">
+            <label for="waveform" style="margin-top:0;">Waveform:</label>
+            <select id="waveform">
+              <option value="sine">Sine</option>
+              <option value="square" selected>Square</option>
+              <option value="triangle">Triangle</option>
+              <option value="sawtooth">Sawtooth</option>
+            </select>
+          </div>
+          <div style="flex: 1;">
+            <label for="volume" style="margin-top:0;">Gain: <span id="volume-val">0.08</span></label>
+            <input type="range" id="volume" min="0" max="0.3" step="0.01" value="0.08">
+          </div>
+        </div>
+        <label for="filter-freq">LPF (Hz): <span id="filter-freq-val">5000</span></label>
+        <input type="range" id="filter-freq" min="100" max="20000" step="10" value="5000">
+        <label>Envelope:</label>
+        <div class="seg" style="margin-top:5px;">
+          <button id="env-sus" class="active">Sustain</button>
+          <button id="env-dec">Decay</button>
+        </div>
+        <label for="duration">Duration: <span id="duration-val">1.5</span>s</label>
+        <input type="range" id="duration" min="0.5" max="4" step="0.1" value="1.5">
+        <p>Every note has a 20 ms attack. Sustain holds a steady level; Decay fades over exactly the duration. In successive mode each note lasts the full duration.</p>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Node Info</h2>
+      <div class="control-content">
+        <div id="hover-info">Hover over a node.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+  (function () {
+    /* ============================================================
+       1. CONSTANTS & DATA
+       ============================================================ */
+    const FUND = 440;
+
+    // Design-space layout (scaled to fit window)
+    const PAD = 40, LANE_W = 52, LM = 168, RM = 46;
+    const TOP = 82, PH = 600, BOTTOM = 46;
+    const NODE_R = 13.5;
+    const MIN_GAP = 60; // cents; minimum same-lane separation
+
+    // header / button geometry
+    const ROW_X0 = 8, ROW_X1 = LM - 50, ROW_H = 20;
+    const CB_W = 62, BTN_H = 15, VIS_Y0 = 23, SEL_Y0 = 41;
+    const ALL_Y0 = TOP + PH + 19;
+
+    const COL_DEFS = [
+      { key: 'root', lanes: 1, c: { p: '#ccc',    a: '#000' } },
+      { key: 'et',   lanes: 2, c: { p: '#cfd8dc', a: '#37474f' } },
+      { key: '3',    lanes: 1, c: { p: '#b3d6b3', a: '#1e601e' },
+        ratios: ['9/8', '81/64', '4/3', '3/2', '27/16', '16/9'] },
+      { key: '5',    lanes: 2, c: { p: '#c3cde6', a: '#191970' },
+        ratios: ['25/24', '16/15', '10/9', '6/5', '5/4', '45/32', '25/16', '8/5', '5/3', '9/5', '15/8'] },
+      { key: '7',    lanes: 3, c: { p: '#e0b3e0', a: '#800080' },
+        ratios: ['36/35', '28/27', '21/20', '15/14', '8/7', '7/6', '9/7', '7/5', '10/7', '14/9', '12/7', '7/4'] },
+      { key: '11',   lanes: 2, c: { p: '#ffb3b3', a: '#ff0000' },
+        ratios: ['33/32', '12/11', '11/10', '11/9', '11/8', '16/11', '11/7', '11/6'] },
+      { key: '13',   lanes: 1, c: { p: '#e5c9b3', a: '#a0522d' },
+        ratios: ['13/12', '13/11', '16/13', '13/10', '13/9', '13/8', '13/7'] }
+    ];
+    const colByKey = {};
+    let cx = LM;
+    COL_DEFS.forEach(d => { d.w = d.lanes * LANE_W + PAD; d.x0 = cx; cx += d.w; colByKey[d.key] = d; });
+    const DW = cx + RM;
+    const DH = TOP + PH + BOTTOM;
+    function yOf(c) { return TOP + PH * (1 - c / 1200); }
+
+    const NAMES12 = {
+      0: 'Perfect unison', 100: 'Minor 2nd', 200: 'Major 2nd', 300: 'Minor 3rd', 400: 'Major 3rd',
+      500: 'Perfect 4th', 600: 'Tritone', 700: 'Perfect 5th', 800: 'Minor 6th', 900: 'Major 6th',
+      1000: 'Minor 7th', 1100: 'Major 7th', 1200: 'Perfect octave'
+    };
+    const NAMES24 = Object.assign({}, NAMES12, {
+      50: 'Quarter tone', 150: 'Neutral 2nd', 250: 'Subminor 3rd', 350: 'Neutral 3rd',
+      450: 'Supermajor 3rd', 550: 'Semi-augmented 4th', 650: 'Semi-diminished 5th',
+      750: 'Subminor 6th', 850: 'Neutral 6th', 950: 'Supermajor 6th',
+      1050: 'Neutral 7th', 1150: 'Semi-diminished octave'
+    });
+
+    /* ---- Build nodes ---- */
+    const nodes = [];
+    const centsOf = r => 1200 * Math.log2(r);
+
+    nodes.push({ id: 'ROOT:1/1', colKey: 'root', type: 'root', label: '1/1', ratio: 1, cents: 0,    lane: 0 });
+    nodes.push({ id: 'ROOT:2/1', colKey: 'root', type: 'root', label: '2/1', ratio: 2, cents: 1200, lane: 0 });
+
+    for (let c = 50; c < 1200; c += 50) {
+      const odd = (c % 100 !== 0);
+      nodes.push({ id: 'ET:' + c, colKey: 'et', type: 'et', label: String(c),
+                   ratio: Math.pow(2, c / 1200), cents: c, lane: odd ? 1 : 0, odd });
+    }
+
+    COL_DEFS.filter(d => d.ratios).forEach(d => {
+      const list = d.ratios.map(s => {
+        const [n, m] = s.split('/').map(Number);
+        return { s, ratio: n / m, cents: centsOf(n / m) };
+      }).sort((a, b) => a.cents - b.cents);
+      const last = new Array(d.lanes).fill(-1e9);
+      list.forEach(it => {
+        let lane = -1;
+        for (let l = 0; l < d.lanes; l++) { if (it.cents - last[l] >= MIN_GAP) { lane = l; break; } }
+        if (lane < 0) { // fall back to the lane with the biggest gap
+          let bestGap = -Infinity;
+          for (let l = 0; l < d.lanes; l++) { const g = it.cents - last[l]; if (g > bestGap) { bestGap = g; lane = l; } }
+        }
+        last[lane] = it.cents;
+        nodes.push({ id: 'JI:' + it.s, colKey: d.key, type: 'ji', label: it.s, ratio: it.ratio, cents: it.cents, lane });
+      });
+    });
+
+    function bandFn(n, step) {
+      if (n.cents === 0) return 0;          // exact-only: unison
+      if (n.cents === 1200) return 1200;    // exact-only: octave
+      let b = Math.round(n.cents / step) * step;
+      if (b <= 0) b = step;
+      if (b >= 1200) b = 1200 - step;
+      return b;
+    }
+    nodes.forEach(n => {
+      const d = colByKey[n.colKey];
+      n.col = d;
+      n.colorSet = d.c;
+      n.x = d.x0 + PAD / 2 + LANE_W * (n.lane + 0.5);
+      n.y = yOf(n.cents);
+      n.band12 = bandFn(n, 100);
+      n.band24 = bandFn(n, 50);
+    });
+    nodes.sort((a, b) => a.cents - b.cents);
+
+    /* ============================================================
+       2. STATE
+       ============================================================ */
+    let mode = 'select';   // 'select' | 'listen' | 'test'
+    let res = 12;          // 12 | 24
+    const colVisible = { root: true, et: true, '3': true, '5': true, '7': false, '11': false, '13': false };
+    const selected = new Set(['JI:3/2', 'JI:4/3', 'JI:5/4', 'JI:6/5']);
+    let hover = null;
+    let playingId = null, playTimer = null;
+    const test = { active: false, current: null, answered: false, clicked: null,
+                   correct: 0, total: 0, streak: 0, best: 0, last: null };
+
+    const isVisibleRes = n => !(n.odd && res === 12);
+    // "shown" = exists on the grid at the current resolution and its column is switched on
+    const isShown = n => isVisibleRes(n) && colVisible[n.colKey];
+    // SELECT draws every shown node; LISTEN and TEST draw only selected ones
+    const isVisible = n => isShown(n) && (mode === 'select' || selected.has(n.id));
+    const getPool = () => nodes.filter(n => selected.has(n.id) && isShown(n));
+    const allShown = () => nodes.filter(isShown);
+    const bandKey = n => res === 12 ? n.band12 : n.band24;
+    const rowStep = () => res === 12 ? 100 : 50;
+    const names = () => res === 12 ? NAMES12 : NAMES24;
+    const rowMembers = c => nodes.filter(n => isShown(n) && bandKey(n) === c);
+    const colMembers = d => nodes.filter(n => n.col === d && isShown(n));
+    function groupState(members) {
+      if (!members.length) return 'empty';
+      const k = members.filter(n => selected.has(n.id)).length;
+      return k === 0 ? 'none' : (k === members.length ? 'all' : 'part');
+    }
+    function toggleGroup(members) {
+      const all = members.length && members.every(n => selected.has(n.id));
+      members.forEach(n => all ? selected.delete(n.id) : selected.add(n.id));
+    }
+    function describe(n) {
+      if (n.type === 'et') return n.cents + '¢ tempered';
+      if (n.type === 'root') return n.label + (n.cents === 0 ? ' (unison)' : ' (octave)');
+      return n.label + ' (' + n.cents.toFixed(1) + '¢)';
+    }
+
+    /* ============================================================
+       3. AUDIO & FUNDAMENTAL
+       ============================================================ */
+    let audioCtx = null, masterGain = null, lpf = null, voices = [];
+    let gainVal = 0.08, durVal = 1.5, lpfVal = 5000;
+    let wave = 'square', envMode = 'sustain';
+    let playMode = 'simul', dirMode = 'above', spanMode = 'simple';
+    const ATTACK = 0.02, RELEASE = 0.08, GAP = 0.12;
+
+    // Fundamental settings
+    const F = { mode: 'fixed', fixed: 440, min: 220, max: 440, quant: 'any' };
+    let dispMode = 'hz';
+    let curFund = 440;
+    const PITCH_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    const NOTE_SEMI = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+    const C4 = 440 * Math.pow(2, -9 / 12);
+
+    function freqToName(f) {
+      const t = 12 * Math.log2(f / C4);
+      const ns = Math.round(t);
+      const pi = ((ns % 12) + 12) % 12;
+      const o = 4 + Math.floor(ns / 12);
+      const cents = Math.round(1200 * Math.log2(f / (C4 * Math.pow(2, ns / 12))));
+      return PITCH_NAMES[pi] + o + ' ' + (cents >= 0 ? '+' : '-') + Math.abs(cents) + 'c';
+    }
+    function parseFreq(str, pitchMode) {
+      str = String(str).trim();
+      if (!pitchMode) {
+        if (!/^[0-9]*\.?[0-9]+\s*(hz)?$/i.test(str)) return null;
+        const v = parseFloat(str);
+        return (isFinite(v) && v > 0) ? v : null;
+      }
+      const m = str.match(/^([A-Ga-g])\s*([#♯♭b♭]?)\s*(-?\d)?\s*([+\-−]\s*\d+(?:\.\d+)?)?\s*c?$/);
+      if (!m) return null;
+      const acc = m[2];
+      const semis = NOTE_SEMI[m[1].toUpperCase()] + ((acc === '#' || acc === '♯') ? 1 : (acc ? -1 : 0));
+      const oct = (m[3] !== undefined) ? parseInt(m[3], 10) : 4;
+      const cents = m[4] ? parseFloat(m[4].replace(/\s+/g, '').replace('−', '-')) : 0;
+      return C4 * Math.pow(2, ((oct - 4) * 12 + semis) / 12 + cents / 1200);
+    }
+    const fmtFreq = f => dispMode === 'pitch' ? freqToName(f) : f.toFixed(2);
+
+    function quantStep() { return F.quant === '12' ? 100 : (F.quant === '24' ? 50 : 0); }
+    function tempRange() {
+      const lo = Math.min(F.min, F.max), hi = Math.max(F.min, F.max), step = quantStep();
+      return {
+        step,
+        kmin: Math.ceil(1200 * Math.log2(lo / FUND) / step - 1e-9),
+        kmax: Math.floor(1200 * Math.log2(hi / FUND) / step + 1e-9)
+      };
+    }
+    function rangeOK() {
+      if (F.mode === 'fixed' || F.quant === 'any') return true;
+      const r = tempRange();
+      return r.kmax >= r.kmin;
+    }
+    function pickFundamental() {
+      if (F.mode === 'fixed') return F.fixed;
+      const lo = Math.min(F.min, F.max), hi = Math.max(F.min, F.max);
+      if (F.quant === 'any') {
+        const span = 1200 * Math.log2(hi / lo);
+        return lo * Math.pow(2, Math.random() * span / 1200);
+      }
+      const r = tempRange();
+      if (r.kmax < r.kmin) { setFundMsg('No ' + F.quant + '-TET pitch lies within this range. Widen it.'); return null; }
+      const k = r.kmin + Math.floor(Math.random() * (r.kmax - r.kmin + 1));
+      return FUND * Math.pow(2, k * r.step / 1200);
+    }
+
+    function setFundMsg(msg) { $('fund-msg').textContent = msg || ''; }
+    function checkRange() {
+      if (!rangeOK()) setFundMsg('No ' + F.quant + '-TET pitch lies within this range. Widen it.');
+      else setFundMsg('');
+    }
+    function updateFundCurrent() {
+      $('fund-current').textContent = 'Current: ' + freqToName(curFund) + '  ·  ' + curFund.toFixed(2) + ' Hz';
+    }
+    function refreshFundInputs() {
+      const p = dispMode === 'pitch';
+      $('fund-input').value = fmtFreq(F.fixed);
+      $('fund-min').value = fmtFreq(F.min);
+      $('fund-max').value = fmtFreq(F.max);
+      $('fund-label').textContent = p ? 'Fundamental (pitch + cents):' : 'Fundamental (Hz):';
+      $('min-label').textContent = p ? 'Min (pitch):' : 'Min (Hz):';
+      $('max-label').textContent = p ? 'Max (pitch):' : 'Max (Hz):';
+      $('fixed-row').style.display = F.mode === 'fixed' ? '' : 'none';
+      $('var-rows').style.display = F.mode === 'var' ? '' : 'none';
+    }
+    function commitFund(which) {
+      const el = $(which === 'fixed' ? 'fund-input' : 'fund-' + which);
+      const f = parseFreq(el.value, dispMode === 'pitch');
+      if (f === null || f < 20 || f > 4000) {
+        setFundMsg('Invalid value. Enter ' + (dispMode === 'pitch' ? 'a pitch such as A4 +0c' : 'a frequency in Hz') + ' between 20 and 4000 Hz.');
+        refreshFundInputs();
+        return;
+      }
+      if (which === 'min' && f > F.max) { setFundMsg('Min must not exceed Max.'); refreshFundInputs(); return; }
+      if (which === 'max' && f < F.min) { setFundMsg('Max must not be below Min.'); refreshFundInputs(); return; }
+      F[which] = f;
+      if (which === 'fixed') { curFund = F.fixed; updateFundCurrent(); }
+      checkRange();
+      refreshFundInputs();
+    }
+
+    function ensureAudio() {
+      if (!audioCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AC();
+        lpf = audioCtx.createBiquadFilter();
+        lpf.type = 'lowpass';
+        lpf.frequency.value = lpfVal;
+        lpf.Q.value = 1.0;
+        masterGain = audioCtx.createGain();
+        masterGain.gain.value = gainVal;
+        lpf.connect(masterGain);
+        masterGain.connect(audioCtx.destination);
+      }
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+    function stopVoices() {
+      if (!audioCtx) return;
+      const now = audioCtx.currentTime;
+      voices.forEach(v => {
+        try {
+          v.env.gain.cancelScheduledValues(now);
+          v.env.gain.setValueAtTime(v.env.gain.value, now);
+          v.env.gain.linearRampToValueAtTime(0, now + 0.04);
+          v.osc.stop(now + 0.06);
+        } catch (e) { /* already stopped */ }
+      });
+      voices = [];
+    }
+    function stopAll() {
+      stopVoices();
+      clearTimeout(playTimer);
+      playingId = null;
+      requestDraw();
+    }
+    function schedNote(freq, t0, dur, peak) {
+      const osc = audioCtx.createOscillator();
+      osc.type = wave;
+      osc.frequency.setValueAtTime(freq, t0);
+      const env = audioCtx.createGain();
+      env.gain.setValueAtTime(0, t0);
+      env.gain.linearRampToValueAtTime(peak, t0 + ATTACK);
+      if (envMode === 'decay') {
+        env.gain.exponentialRampToValueAtTime(0.0005, t0 + dur);
+        env.gain.setValueAtTime(0, t0 + dur);
+      } else {
+        env.gain.setValueAtTime(peak, t0 + dur - RELEASE);
+        env.gain.linearRampToValueAtTime(0, t0 + dur);
+      }
+      osc.connect(env);
+      env.connect(lpf);
+      osc.start(t0);
+      osc.stop(t0 + dur + 0.05);
+      voices.push({ osc, env });
+    }
+    function playInterval(n, fund, dir, mult) {
+      ensureAudio();
+      stopVoices();
+      const R = n.ratio * mult;
+      const f2 = dir === 'above' ? fund * R : fund / R;
+      const t0 = audioCtx.currentTime + 0.02, dur = durVal;
+      let total;
+      if (playMode === 'simul') {
+        schedNote(fund, t0, dur, 0.5);
+        schedNote(f2, t0, dur, 0.5);
+        total = dur;
+      } else {
+        schedNote(fund, t0, dur, 0.7);
+        schedNote(f2, t0 + dur + GAP, dur, 0.7);
+        total = 2 * dur + GAP;
+      }
+      // never reveal the sounding node during a test
+      playingId = test.active ? null : n.id;
+      clearTimeout(playTimer);
+      playTimer = setTimeout(() => { playingId = null; requestDraw(); }, total * 1000);
+      requestDraw();
+    }
+    const MIN_NOTE = 20, MAX_NOTE = 12000;
+    const isP1 = n => n.type === 'root' && n.cents === 0;
+    function pickDir() { return dirMode === 'both' ? (Math.random() < 0.5 ? 'above' : 'below') : dirMode; }
+    function pickMult() { return spanMode === 'simple' ? 1 : (spanMode === 'compound' ? 2 : (Math.random() < 0.5 ? 1 : 2)); }
+    function allowedMults() { return spanMode === 'simple' ? [1] : (spanMode === 'compound' ? [2] : [1, 2]); }
+    // compound-only: a compound unison would be a plain octave, so the unison is not asked
+    function questionNodes(pool) { return spanMode === 'compound' ? pool.filter(n => !isP1(n)) : pool; }
+    // a node is correct if (node x allowed span multiplier) equals the sounding size
+    function isCorrect(n) {
+      if (!test.current) return false;
+      const R = test.current.ratio * test.mult;
+      return allowedMults().some(m => Math.abs(n.ratio * m - R) < 1e-9);
+    }
+    function gcd(a, b) { return b ? gcd(b, a % b) : a; }
+    function actualLabel(n, mult) {
+      if (mult === 1) return describe(n);
+      if (n.type === 'et') return (n.cents + 1200) + '¢ tempered (compound ' + n.cents + '¢)';
+      const p = n.label.split('/').map(Number);
+      const g = gcd(2 * p[0], p[1]);
+      return (2 * p[0] / g) + '/' + (p[1] / g) + ' (compound ' + n.label + ', ' + (n.cents + 1200).toFixed(1) + '¢)';
+    }
+    // choose a fundamental and direction so that both notes stay audible
+    function planPlay(n, mult) {
+      const R = n.ratio * mult;
+      for (let i = 0; i < 60; i++) {
+        const f = pickFundamental();
+        if (f === null) return null;
+        const dir = pickDir();
+        const lo = dir === 'above' ? f : f / R, hi = dir === 'above' ? f * R : f;
+        if (lo >= MIN_NOTE && hi <= MAX_NOTE) return { f, dir };
+      }
+      setFundMsg('That interval falls outside the audible range for this fundamental, direction and span. Adjust one of them.');
+      return null;
+    }
+    function listenNode(n) {
+      const mult = pickMult();
+      const plan = planPlay(n, mult);
+      if (!plan) return;
+      setFundMsg('');
+      curFund = plan.f;
+      updateFundCurrent();
+      playInterval(n, plan.f, plan.dir, mult);
+    }
+
+    /* ============================================================
+       4. CANVAS LAYOUT & RENDERING
+       ============================================================ */
+    const canvas = document.getElementById('grid');
+    const ctx = canvas.getContext('2d');
+    const container = document.getElementById('container');
+    let S = 1, ox = 0, oy = 0, cssW = 0, cssH = 0, userScale = 1;
+
+    function layout() {
+      const r = container.getBoundingClientRect();
+      const cw = Math.floor(r.width), ch = Math.floor(r.height);
+      const fit = Math.min(cw / DW, ch / DH, 1.8);
+      S = fit * userScale;
+      cssW = Math.max(cw, Math.ceil(DW * S));
+      cssH = Math.max(ch, Math.ceil(DH * S));
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = cssW * dpr;
+      canvas.height = cssH * dpr;
+      canvas.style.width = cssW + 'px';
+      canvas.style.height = cssH + 'px';
+      ox = (cssW - DW * S) / 2;
+      oy = (cssH - DH * S) / 2;
+      requestDraw();
+    }
+
+    let drawQueued = false;
+    function requestDraw() {
+      if (drawQueued) return;
+      drawQueued = true;
+      requestAnimationFrame(() => { drawQueued = false; render(); });
+    }
+
+    const FONT = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+
+    function fitText(text, maxW, startSize, weight) {
+      let size = startSize;
+      const w = weight ? weight + ' ' : '';
+      ctx.font = w + size + 'px ' + FONT;
+      while (ctx.measureText(text).width > maxW && size > 6) { size -= 0.5; ctx.font = w + size + 'px ' + FONT; }
+    }
+
+    function rr(x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.arcTo(x + w, y, x + w, y + r, r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+      ctx.lineTo(x + r, y + h);
+      ctx.arcTo(x, y + h, x, y + h - r, r);
+      ctx.lineTo(x, y + r);
+      ctx.arcTo(x, y, x + r, y, r);
+      ctx.closePath();
+    }
+
+    // style: 'plain' | 'part' | 'on'  (modern pill-shaped chip)
+    function drawBtn(x, y, w, h, label, style, col, tint, alpha, hot) {
+      ctx.save();
+      ctx.globalAlpha = (style === 'on' && hot) ? alpha * 0.85 : alpha;
+      rr(x, y, w, h, h / 2);
+      if (style === 'on') ctx.fillStyle = col;
+      else if (style === 'part') ctx.fillStyle = tint;
+      else ctx.fillStyle = hot ? '#e2e8e4' : '#eef1ef';
+      ctx.fill();
+      if (style === 'part' || (hot && style !== 'on')) {
+        ctx.strokeStyle = col;
+        ctx.lineWidth = hot ? 1.5 : 1;
+        ctx.stroke();
+      }
+      ctx.fillStyle = style === 'on' ? '#fff' : (style === 'part' ? col : '#4a4f4c');
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      fitText(label, w - 12, 9, '600');
+      ctx.fillText(label, x + w / 2, y + h / 2 + 0.5);
+      ctx.restore();
+    }
+
+    const hotIs = (type, d) => hover && hover.type === type && hover.d === d;
+
+    function render() {
+      const dpr = window.devicePixelRatio || 1;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, cssW, cssH);
+      ctx.translate(ox, oy);
+      ctx.scale(S, S);
+
+      const interactive = (mode === 'select');
+      const step = rowStep();
+      const gridR = DW - RM;
+
+      // hover shading for header groups
+      if (hover && hover.type === 'row') {
+        const y1 = yOf(Math.min(1200, hover.c + step / 2)), y2 = yOf(Math.max(0, hover.c - step / 2));
+        ctx.fillStyle = 'rgba(30,96,30,0.07)';
+        ctx.fillRect(LM, y1, gridR - LM, y2 - y1);
+      } else if (hover && hover.type === 'colsel') {
+        ctx.fillStyle = 'rgba(30,96,30,0.07)';
+        ctx.fillRect(hover.d.x0, TOP - 14, hover.d.w, PH + 28);
+      }
+
+      // horizontal grid lines (dark = 12-TET, light = 24-TET midpoints) with cents labels on both edges
+      for (let c = 0; c <= 1200; c += 50) {
+        const y = yOf(c);
+        ctx.beginPath();
+        ctx.strokeStyle = (c % 100 === 0) ? '#cfcfcf' : '#eeeeee';
+        ctx.lineWidth = 1;
+        ctx.moveTo(LM, y);
+        ctx.lineTo(gridR, y);
+        ctx.stroke();
+        ctx.fillStyle = (c % 100 === 0) ? '#888' : '#aaa';
+        ctx.font = '8px ' + FONT;
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'right';
+        ctx.fillText(c + '¢', LM - 6, y);
+        ctx.textAlign = 'left';
+        ctx.fillText(c + '¢', gridR + 6, y);
+      }
+      // vertical column separators
+      ctx.strokeStyle = '#f0f0f0';
+      COL_DEFS.forEach(d => {
+        ctx.beginPath();
+        ctx.moveTo(d.x0, TOP - 14);
+        ctx.lineTo(d.x0, TOP + PH + 14);
+        ctx.stroke();
+      });
+      ctx.beginPath();
+      ctx.moveTo(gridR, TOP - 14);
+      ctx.lineTo(gridR, TOP + PH + 14);
+      ctx.stroke();
+
+      // column headers: card with accent bar, title, show/hide and select-all chips
+      COL_DEFS.forEach(d => {
+        const vis = colVisible[d.key];
+        const st = groupState(colMembers(d));
+        const a = interactive ? 1 : 0.5;
+        const mid = d.x0 + d.w / 2;
+        let label;
+        if (d.key === 'root') label = 'Root';
+        else if (d.key === 'et') label = res === 12 ? '12-TET' : '24-TET';
+        else label = d.key + '-limit';
+        ctx.save();
+        ctx.globalAlpha = a * (vis ? 1 : 0.6);
+        rr(d.x0 + 4, 2, d.w - 8, 58, 9);
+        ctx.fillStyle = '#f6f8f9';
+        ctx.fill();
+        rr(d.x0 + 16, 2, d.w - 32, 3, 1.5);
+        ctx.fillStyle = vis ? d.c.a : '#c4c9c6';
+        ctx.fill();
+        ctx.fillStyle = vis ? d.c.a : '#999';
+        ctx.font = '700 10.5px ' + FONT;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(label, mid, 15);
+        ctx.restore();
+        drawBtn(mid - CB_W / 2, VIS_Y0, CB_W, BTN_H, vis ? 'Hide' : 'Show', 'plain', d.c.a, d.c.p, a, hotIs('colvis', d));
+        if (vis) {
+          drawBtn(mid - CB_W / 2, SEL_Y0, CB_W, BTN_H, st === 'all' ? 'Deselect all' : 'Select all',
+                  st === 'all' ? 'on' : (st === 'part' ? 'part' : 'plain'), d.c.a, d.c.p, a, hotIs('colsel', d));
+        }
+      });
+
+      // interval-class heading
+      ctx.save();
+      ctx.globalAlpha = interactive ? 1 : 0.5;
+      ctx.fillStyle = '#9aa3a0';
+      ctx.font = '700 8.5px ' + FONT;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      if ('letterSpacing' in ctx) ctx.letterSpacing = '1px';
+      ctx.fillText('INTERVAL CLASS', ROW_X0 + 4, 52);
+      ctx.restore();
+
+      // row (interval class) buttons
+      const nm = names();
+      for (let c = 0; c <= 1200; c += step) {
+        const st = groupState(rowMembers(c));
+        const a = (interactive ? 1 : 0.5) * (st === 'empty' ? 0.5 : 1);
+        drawBtn(ROW_X0, yOf(c) - ROW_H / 2, ROW_X1 - ROW_X0, ROW_H, nm[c],
+                st === 'all' ? 'on' : (st === 'part' ? 'part' : 'plain'), '#1e601e', '#dcebdc', a,
+                hover && hover.type === 'row' && hover.c === c);
+      }
+      // select-all beneath the row buttons
+      {
+        const st = groupState(allShown());
+        drawBtn(ROW_X0, ALL_Y0, ROW_X1 - ROW_X0, ROW_H, st === 'all' ? 'Deselect all' : 'Select all',
+                st === 'all' ? 'on' : (st === 'part' ? 'part' : 'plain'), '#1e601e', '#dcebdc',
+                interactive ? 1 : 0.5, hover && hover.type === 'all');
+      }
+
+      // nodes
+      for (const n of nodes) {
+        if (!isVisible(n)) continue;
+        const sel = selected.has(n.id);
+        const cs = n.colorSet;
+        if (hover && hover.type === 'node' && hover.node === n) {
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, NODE_R + 4, 0, 2 * Math.PI);
+          ctx.fillStyle = 'rgba(0,123,255,0.18)';
+          ctx.fill();
+        }
+        ctx.save();
+        if (!sel) ctx.globalAlpha = 0.35; // visible-but-deselected: much lighter
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, NODE_R, 0, 2 * Math.PI);
+        ctx.fillStyle = sel ? cs.a : cs.p;
+        ctx.fill();
+        ctx.strokeStyle = sel ? '#000' : '#555';
+        ctx.lineWidth = sel ? 2 : 1;
+        ctx.stroke();
+        fitText(n.label, NODE_R * 1.8, 9);
+        ctx.fillStyle = sel ? '#fff' : '#222';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(n.label, n.x, n.y);
+        ctx.restore();
+
+        if (playingId === n.id && !test.active) {
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, NODE_R + 5, 0, 2 * Math.PI);
+          ctx.strokeStyle = '#ff9800';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+        }
+      }
+
+      // empty-pool message in LISTEN
+      if (mode === 'listen' && getPool().length === 0) {
+        ctx.fillStyle = '#999';
+        ctx.font = '14px ' + FONT;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('No pitches selected. Switch to SELECT to choose some.', (LM + gridR) / 2, TOP + PH / 2);
+      }
+
+      // test feedback rings (after answering only)
+      if (test.active && test.answered && test.current) {
+        const ring = (n, col) => {
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, NODE_R + 5, 0, 2 * Math.PI);
+          ctx.strokeStyle = col;
+          ctx.lineWidth = 3;
+          ctx.stroke();
+        };
+        if (!isCorrect(test.clicked)) ring(test.clicked, '#d32f2f');
+        getPool().filter(isCorrect).forEach(m => ring(m, '#2e9e2e'));
+      }
+    }
+
+    /* ============================================================
+       5. HIT TESTING & INTERACTION
+       ============================================================ */
+    function toDesign(e) {
+      const r = canvas.getBoundingClientRect();
+      return { x: (e.clientX - r.left - ox) / S, y: (e.clientY - r.top - oy) / S };
+    }
+
+    function hitTest(p) {
+      let best = null, bd = Infinity;
+      const lim = (NODE_R + 2) * (NODE_R + 2);
+      for (const n of nodes) {
+        if (!isVisible(n)) continue;
+        const dx = p.x - n.x, dy = p.y - n.y, d2 = dx * dx + dy * dy;
+        if (d2 <= lim && d2 < bd) { best = n; bd = d2; }
+      }
+      if (best) return { type: 'node', node: best, key: 'n:' + best.id };
+      if (mode !== 'select') return null;
+
+      for (const d of COL_DEFS) {
+        const mid = d.x0 + d.w / 2;
+        if (p.x >= mid - CB_W / 2 && p.x <= mid + CB_W / 2) {
+          if (p.y >= VIS_Y0 && p.y <= VIS_Y0 + BTN_H) return { type: 'colvis', d, key: 'v:' + d.key };
+          if (p.y >= SEL_Y0 && p.y <= SEL_Y0 + BTN_H && colVisible[d.key] && colMembers(d).length) {
+            return { type: 'colsel', d, key: 's:' + d.key };
+          }
+        }
+      }
+      if (p.x >= ROW_X0 && p.x <= ROW_X1) {
+        const step = rowStep();
+        for (let c = 0; c <= 1200; c += step) {
+          if (Math.abs(p.y - yOf(c)) <= ROW_H / 2 && rowMembers(c).length) return { type: 'row', c, key: 'r:' + c };
+        }
+        if (p.y >= ALL_Y0 && p.y <= ALL_Y0 + ROW_H && allShown().length) return { type: 'all', key: 'a' };
+      }
+      return null;
+    }
+
+    canvas.addEventListener('mousemove', e => {
+      const h = hitTest(toDesign(e));
+      const k = h ? h.key : '';
+      const ok = hover ? hover.key : '';
+      let cursor = 'default';
+      if (h) cursor = (mode === 'test' && test.answered) ? 'default' : 'pointer';
+      canvas.style.cursor = cursor;
+      if (k !== ok) { hover = h; updateInfo(); requestDraw(); }
+    });
+    canvas.addEventListener('mouseleave', () => {
+      if (hover) { hover = null; updateInfo(); requestDraw(); }
+    });
+    canvas.addEventListener('click', e => {
+      const h = hitTest(toDesign(e));
+      if (!h) return;
+      if (h.type === 'node') {
+        if (mode === 'listen') listenNode(h.node);
+        else if (mode === 'select') toggleSel(h.node);
+        else if (mode === 'test' && test.active && !test.answered) answer(h.node);
+      } else if (h.type === 'row') {
+        toggleGroup(rowMembers(h.c)); afterPoolChange();
+      } else if (h.type === 'colsel') {
+        toggleGroup(colMembers(h.d)); afterPoolChange();
+      } else if (h.type === 'all') {
+        toggleGroup(allShown()); afterPoolChange();
+      } else if (h.type === 'colvis') {
+        colVisible[h.d.key] = !colVisible[h.d.key];
+        hover = null;
+        afterPoolChange();
+        updateInfo();
+      }
+    });
+
+    function toggleSel(n) {
+      if (selected.has(n.id)) selected.delete(n.id); else selected.add(n.id);
+      afterPoolChange();
+    }
+    function afterPoolChange() { updatePoolUI(); requestDraw(); }
+
+    /* ============================================================
+       6. TEST LOGIC
+       ============================================================ */
+    function startTest() {
+      Object.assign(test, { active: true, correct: 0, total: 0, streak: 0, best: 0, last: null, fund: null, dir: null, mult: 1 });
+      nextQuestion();
+    }
+    function nextQuestion() {
+      const qn = questionNodes(getPool());
+      let cand = qn.length > 3 ? qn.filter(n => n !== test.last) : qn;
+      if (!cand.length) cand = qn;
+      const node = cand[Math.floor(Math.random() * cand.length)];
+      const mult = pickMult();
+      const plan = planPlay(node, mult);
+      test.answered = false;
+      test.clicked = null;
+      if (!plan) {
+        test.current = null;
+        test.answered = true;
+        setFeedback('Could not play that interval with the current settings (see the Fundamental panel). Press Next to try again.', 'bad');
+        updateTestUI();
+        requestDraw();
+        return;
+      }
+      setFundMsg('');
+      test.current = node;
+      test.last = node;
+      test.mult = mult;
+      test.fund = plan.f;
+      test.dir = plan.dir;
+      curFund = plan.f;
+      updateFundCurrent();
+      setFeedback('Listen, then click the node you heard.', '');
+      playInterval(node, test.fund, test.dir, test.mult);
+      updateTestUI();
+      requestDraw();
+    }
+    function replay() { if (test.active && test.current) playInterval(test.current, test.fund, test.dir, test.mult); }
+    function answer(n) {
+      test.answered = true;
+      test.clicked = n;
+      test.total++;
+      const ok = isCorrect(n);
+      const accepted = getPool().filter(isCorrect);
+      let actual = actualLabel(test.current, test.mult);
+      if (accepted.length > 1) actual += ' (accepted: ' + accepted.map(m => m.label).join(' or ') + ')';
+      if (ok) {
+        test.correct++; test.streak++; test.best = Math.max(test.best, test.streak);
+        setFeedback('Correct: ' + actual + '.', 'good');
+      } else {
+        test.streak = 0;
+        setFeedback('Not quite. You chose ' + describe(n) + '; it was ' + actual + '.', 'bad');
+      }
+      updateTestUI();
+      requestDraw();
+    }
+
+    /* ============================================================
+       7. UI WIRING
+       ============================================================ */
+    const $ = id => document.getElementById(id);
+    const HINTS = {
+      select: 'Show the prime limits you want, then click nodes or interval classes to select them.',
+      listen: 'Click a node to hear that interval relative to the given fundamental. Only selected pitches are shown.',
+      test:   'An interval plays. Click its node. Only pool pitches are shown.'
+    };
+
+    function setStatus(msg, warn) { const s = $('status'); s.textContent = msg || ''; s.className = warn ? 'warn' : ''; }
+    function setFeedback(msg, cls) { const f = $('test-feedback'); f.textContent = msg; f.className = cls || ''; }
+
+    function updatePoolUI() {
+      const pool = getPool();
+      const dormant = nodes.filter(n => selected.has(n.id) && !isShown(n)).length;
+      $('pool-count').textContent = 'Pool: ' + pool.length + ' active' + (dormant ? ' (' + dormant + ' dormant)' : '');
+    }
+    function updateModeUI() {
+      ['select', 'listen', 'test'].forEach(m => $('mode-' + m).classList.toggle('active', mode === m));
+      $('mode-hint').textContent = HINTS[mode];
+      const inTest = mode === 'test';
+      $('res-12').disabled = inTest;
+      $('res-24').disabled = inTest;
+      $('btn-clear').disabled = inTest;
+      document.querySelectorAll('.lock').forEach(el => { el.disabled = inTest; });
+      updateTestUI();
+      if (!inTest) { canvas.style.cursor = 'default'; }
+    }
+    function updateTestUI() {
+      $('btn-replay').disabled = !test.active;
+      $('btn-next').disabled = !(test.active && test.answered);
+      if (test.active) {
+        $('test-score').textContent = 'Correct ' + test.correct + ' / ' + test.total + '  ·  Streak ' + test.streak + '  ·  Best ' + test.best;
+      } else if (test.total === 0) {
+        $('test-score').textContent = 'Not started';
+      }
+    }
+    function updateInfo() {
+      const el = $('hover-info');
+      if (!hover || hover.type !== 'node') { el.textContent = 'Hover over a node.'; return; }
+      const n = hover.node;
+      const step = rowStep();
+      const dev = n.cents - Math.round(n.cents / step) * step;
+      const lines = [];
+      lines.push('<b>' + (n.type === 'et' ? n.cents + '¢ (tempered)' : n.label) + '</b>');
+      lines.push('Size: ' + (n.type === 'et' ? n.cents + '.00' : n.cents.toFixed(2)) + '¢');
+      lines.push('Row: ' + names()[bandKey(n)]);
+      lines.push('vs ' + res + '-TET: ' + (dev >= 0 ? '+' : '−') + Math.abs(dev).toFixed(1) + '¢');
+      el.innerHTML = lines.join('<br>');
+    }
+
+    function setMode(m) {
+      if (m === mode) return;
+      if (m === 'test' && getPool().length < 2) {
+        setStatus('Select at least 2 pitches (SELECT mode) before starting a test.', true);
+        return;
+      }
+      if (m === 'test' && !rangeOK()) {
+        setStatus('The fundamental range contains no ' + F.quant + '-TET pitch. Widen it first.', true);
+        checkRange();
+        return;
+      }
+      let summary = '';
+      if (mode === 'test') {
+        stopAll();
+        test.active = false;
+        if (test.total > 0) summary = 'Test ended: ' + test.correct + ' / ' + test.total + ' correct.';
+      }
+      mode = m;
+      hover = null;
+      setStatus(summary, false);
+      if (m === 'test') { setStatus('', false); startTest(); }
+      updateModeUI();
+      updatePoolUI();
+      updateInfo();
+      requestDraw();
+    }
+    function setRes(r) {
+      if (mode === 'test' || r === res) return;
+      res = r;
+      hover = null;
+      $('res-12').classList.toggle('active', res === 12);
+      $('res-24').classList.toggle('active', res === 24);
+      updatePoolUI();
+      updateInfo();
+      requestDraw();
+    }
+
+    $('mode-select').addEventListener('click', () => setMode('select'));
+    $('mode-listen').addEventListener('click', () => setMode('listen'));
+    $('mode-test').addEventListener('click', () => setMode('test'));
+    $('res-12').addEventListener('click', () => setRes(12));
+    $('res-24').addEventListener('click', () => setRes(24));
+    $('btn-clear').addEventListener('click', () => { selected.clear(); afterPoolChange(); });
+    $('btn-replay').addEventListener('click', replay);
+    $('btn-next').addEventListener('click', () => { if (test.active && test.answered) nextQuestion(); });
+
+    function seg(ids, onPick) {
+      Object.entries(ids).forEach(([val, id]) => {
+        $(id).addEventListener('click', () => {
+          Object.values(ids).forEach(i => $(i).classList.toggle('active', i === id));
+          onPick(val);
+        });
+      });
+    }
+    seg({ simul: 'pb-simul', succ: 'pb-succ' }, v => { playMode = v; });
+    seg({ above: 'dir-above', below: 'dir-below', both: 'dir-both' }, v => { dirMode = v; });
+    seg({ simple: 'sp-simple', compound: 'sp-comp', both: 'sp-both' }, v => { spanMode = v; });
+    seg({ fixed: 'fund-fixed', var: 'fund-var' }, v => {
+      F.mode = v;
+      if (v === 'fixed') curFund = F.fixed;
+      refreshFundInputs();
+      checkRange();
+      updateFundCurrent();
+    });
+    seg({ hz: 'disp-hz', pitch: 'disp-pitch' }, v => { dispMode = v; refreshFundInputs(); });
+    seg({ any: 'q-any', '12': 'q-12', '24': 'q-24' }, v => { F.quant = v; checkRange(); });
+    seg({ sustain: 'env-sus', decay: 'env-dec' }, v => { envMode = v; });
+    ['fixed', 'min', 'max'].forEach(k => {
+      const el = $(k === 'fixed' ? 'fund-input' : 'fund-' + k);
+      el.addEventListener('change', () => commitFund(k));
+      el.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); el.blur(); } });
+    });
+
+    $('waveform').addEventListener('change', e => { wave = e.target.value; });
+    $('volume').addEventListener('input', e => {
+      gainVal = parseFloat(e.target.value);
+      $('volume-val').textContent = gainVal.toFixed(2);
+      if (masterGain) masterGain.gain.setValueAtTime(gainVal, audioCtx.currentTime);
+    });
+    $('filter-freq').addEventListener('input', e => {
+      lpfVal = parseFloat(e.target.value);
+      $('filter-freq-val').textContent = lpfVal.toFixed(0);
+      if (lpf) lpf.frequency.setValueAtTime(lpfVal, audioCtx.currentTime);
+    });
+    $('duration').addEventListener('input', e => {
+      durVal = parseFloat(e.target.value);
+      $('duration-val').textContent = durVal.toFixed(1);
+    });
+    $('scale-slider').addEventListener('input', e => {
+      userScale = parseFloat(e.target.value);
+      $('scale-val').textContent = userScale.toFixed(2);
+      layout();
+    });
+
+    // keep keyboard shortcuts usable after clicking controls
+    document.querySelectorAll('button').forEach(b => b.addEventListener('click', () => b.blur()));
+    document.querySelectorAll('input[type="range"]').forEach(r => r.addEventListener('change', () => r.blur()));
+    document.addEventListener('keydown', e => {
+      const t = e.target.tagName;
+      if (t === 'INPUT' || t === 'SELECT' || t === 'TEXTAREA' || t === 'BUTTON') return;
+      if (!test.active) return;
+      if (e.key === 'Enter') { e.preventDefault(); if (test.answered) nextQuestion(); else replay(); }
+      else if (e.key === 'r' || e.key === 'R') { replay(); }
+    });
+
+    document.querySelectorAll('.control-group > h2').forEach(h => {
+      h.addEventListener('click', () => h.parentElement.classList.toggle('collapsed'));
+    });
+
+    window.addEventListener('resize', layout);
+
+    refreshFundInputs();
+    updateFundCurrent();
+    updateModeUI();
+    updatePoolUI();
+    layout();
+  })();
+  </script>
+</body>
+</html>
